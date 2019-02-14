@@ -47,9 +47,8 @@ branch_breakings = function(b) {
 #' which should be the same as the number of leaves in the
 #' phylogenetic tree.
 #'
-#' @return A boolean vector of length equal to the number of edges in
-#' the tree, describing which edges can be broken off to form new
-#' subtrees.
+#' @return A graph describing the forest resulting from breaking the
+#' trees.
 #' @importFrom dplyr group_by, mutate
 #' @importFrom magrittr %>%
 #' @importFrom igraph graph_from_edgelist
@@ -71,12 +70,363 @@ break_tree <- function(tr, X) {
     ## each broken branch will require a new node in the tree
     n_new_nodes = sum(annotated_edges$break_branch)
     broken_tree = as(annotated_edges[,1:2], "matrix")
+    new_roots = (max(annotated_edges) + 1):(max(annotated_edges) + n_new_nodes)
     if(n_new_nodes >= 1) {
-        broken_tree[annotated_edges$break_branch,1] = (max(annotated_edges) + 1):(max(annotated_edges) + n_new_nodes)
+        broken_tree[annotated_edges$break_branch,1] = new_roots
     }
     return(igraph::graph_from_edgelist(broken_tree))
+}
+
+#' Computes the number of leaves per tree
+#'
+#' Given an igraph-formatted forest, computes the number of leaves for
+#' each tree in the forest.
+#'
+#' @param forest An igraph object describing the forest. The function
+#' assumes that the graph is directed, so that the leaves are the
+#' nodes in the graph that have no outgoing edges.
+#'
+#' @param return A vector, length equal to the number of trees in the
+#' forest, elements equal to the number of leaves in the corresponding
+#' tree.
+get_leaf_sizes <- function(forest) {
+    cc = components(forest)
+    adj_mat = as_adjacency_matrix(forest)
+    tree_sizes = adply(1:cc$no, 1, function(comp_idx) {
+        nodes = which(cc$membership == comp_idx)
+        adj_submat = adj_mat[nodes,nodes]
+        n_leaves = sum(rowSums(adj_submat) == 0)
+        return(c("n_leaves" = n_leaves))
+    }, .id = "tree_id")
+    return(tree_sizes)
+}
+
+
+#' Partitions the leaves by tree.
+#'
+#' Given an igraph-formatted forest,
+#'
+#' @param forest An igraph object describing the forest. The function
+#' assumes that the graph is directed, so that the leaves are the
+#' nodes in the graph that have nooutgoing edges.
+#'
+#' @param return A list, length equal to the number of trees in the
+#' forest, each element a vector of nodes giving the leaf nodes in the
+#' corresponding tree.
+get_leaf_list <- function(forest) {
+    cc = components(forest)
+    adj_mat = as_adjacency_matrix(forest)
+    leaves = which(rowSums(adj_mat) == 0)
+    node_and_component = data.frame(node = 1:length(cc$membership), component = cc$membership)
+    leaf_components = node_and_component[leaves,]
+    leaf_list = split(leaf_components$node, leaf_components$component)
+    return(leaf_list)
+}
+
+#' Compute branch probabilities.
+#'
+#' @param X An otu abundance matrix, n x p, rows are samples.
+#' @param tr A phylogenetic tree with p leaves.
+#'
+#' @return A n x n_branches matrix containing branch probabilities for
+#' each sample/branch combination.
+get_branch_probs <- function(X, tr) {
+    A = treeDA:::makeDescendantMatrix(tr)
+    P = plyr::aaply(X, 1, function(x) return(x / sum(x)))
+    ## P %*% A are the node contributions. The contribution of a
+    ## branch is the same as the contribution of the child node in
+    ## that branch, hence the following:
+    child_node = tr$edge[,2]
+    return(P %*% A[,child_node])
+}
+
+#' Computes branch contributions for a set of unifrac distances
+#'
+#' @param X An otu abundance matrix, n x p.
+#' @param tr A phylogenetic tree with p leaves.
+#' @param alpha_list A list containing the alpha values for
+#' guf. Numeric elements correspond to values of alpha, and a
+#' character element "unweighted" corresponds to unweighted Unifrac.
+#'
+#' @return 
+get_all_branch_contribs <- function(X, tr, alpha_list) {
+    P = get_branch_probs(X, tr)
+    branch_lengths = tr$edge.length
+    all_contribs = plyr::laply(alpha_list, function(a) {
+        if(a == "unweighted") {
+            return(uf_contribs_from_branch_probs(P, branch_lengths))
+        } else if(is.numeric(a) && a >= 0 && a <= 1) {
+            return(guf_contribs_from_branch_probs(P, branch_lengths, a))
+        } else {
+            warning("alpha not in [0,1] or equal to 'unweighted'")
+            return(NULL)
+        }        
+    })
     
 }
+
+
+#' Generalized Unifrac branch contributions
+#'
+#' Computes generalized Unifrac branch contributions with pre-computed
+#' branch probabilities.
+#'
+#' @param P A n x nbranches matrix with branch probabilities for each
+#' branch and each sample.
+#' @param branch_lengths An nbranches-length vector with branch lengths.
+#' @param alpha Alpha parameter for generalized Unifrac.
+#'
+#' @return A vector of length nbranches giving branch contributions.
+guf_contribs_from_branch_probs <- function(P, branch_lengths, alpha) {
+    n = nrow(P)
+    pairs = combn(n,2)
+    branch_contrib =
+        apply(pairs, 2, function(idx) {
+            p1 = P[idx[1],]
+            p2 = P[idx[2],]
+            guf_dist = sum(branch_lengths * (p1 + p2)^alpha *
+                               abs((p1 - p2) / (p1 + p2)), na.rm = TRUE)
+            contrib = (p1 + p2)^alpha * abs((p1 - p2) / (p1 + p2)) / guf_dist
+            contrib[(p1 + p2 == 0)] = 0
+            return(contrib)
+        })
+    return(rowMeans(branch_contrib))
+}
+
+#' Unweighted Unifrac branch contributions.
+#'
+#' Computes unweighted Unifrac branch contributions from pre-computed
+#' branch probabilities.
+#'
+#' @param P An n x nbranches matrix with branch probabilities for each
+#' branch and each sample.
+#' @param branch_lengths An nbranches-length vector with branch
+#' lengths.
+#'
+#' @return A vector of length nbranches giving branch contributions.
+uf_contribs_from_branch_probs <- function(P, branch_lengths) {
+    P_ind = P > 0
+    ## for all pairs of indices
+    n = nrow(P)
+    pairs = combn(n, 2)    
+    branch_contrib =
+        apply(pairs, 2, function(idx) {
+            p1 = P_ind[idx[1],]
+            p2 = P_ind[idx[2],]
+            uf_dist = sum(branch_lengths * abs(p1 - p2)) / sum(branch_lengths)
+            return(abs(p1 - p2) / uf_dist)
+        })
+    return(rowMeans(branch_contrib))
+}
+
+#' Returns the number of descendants for each branch in the tree.
+#'
+#' @param tr A tree.
+#'
+#' @return A vector, length equal to the number of branches in the
+#' tree, giving the number of descendants of that branch.
+get_ndescendants <-  function(tr) {
+    A = treeDA:::makeDescendantMatrix(tr)
+    ## The number of descendants of a branch is the number of
+    ## descendants of the child node of that branch, which is the
+    ## second column of tr$edge
+    return(Matrix::colSums(A[,tr$edge[,2]]))
+}
+
+
+#' Makes accumulation plot for branch contributions.
+#' 
+#' @param contribs A matrix with columns corresponding to branches.
+#' @param tr A phylogenetic tree, from ape
+#' @param contrib_names A character vector, giving the names for the
+#' types corresponding to the rows of contribs.
+contrib_accumulation_plot <- function(contribs, tr, contrib_names) {
+    desc = get_ndescendants(tr)
+    breaks = unique(desc)
+    out = sapply(breaks, function(b) rowSums(contribs[,desc <= b]) / rowSums(contribs))
+    contribs_and_breaks = data.frame(t(out), breaks)
+    plotting_df = melt(contribs_and_breaks, id.vars = "breaks")
+    levels(plotting_df$variable) = contrib_names
+    attributes(plotting_df$variable)$class = c("ordered", "factor")
+    return(ggplot(plotting_df, aes(x = breaks, y = value, color = variable)))
+}
+
+#' Tree plotting
+#'
+#' Idea is that plotting goes recursively: If you know where a node
+#' is, its descendants are offset from that position and one level
+#' down, with the offset computed to leave room for all of the
+#' descendants of the child nodes.
+#'
+#' We need this function because the ape plotting functions don't work on trees 
+my_plot_tree <- function(tr) {
+    ntips = length(tr$tip.label)
+    nnodes = tr$Nnode
+    v = numeric(ntips + nnodes)
+    d = numeric(ntips + nnodes)
+    children = makeChildMapping(tr)
+    ## step 1: assign values v to all the leaves, set number of
+    ## descendants for leaves equal to 1
+    tr_collapsed = collapse.singles(tr)
+    Q = ape::vcv(tr_collapsed)
+    v[1:ntips] = svd(Q, nu = 0, nv = 1)$v[,1]
+    d[1:ntips] = 1
+    ## step 2: for every node, find the number of descendants and the
+    ## average v for the leaves descending from that node
+    getDescendants <- function(node) {
+        c = children[[node]]
+        if(is.null(c))
+            return(1)
+        else {
+            ndescendants = sum(sapply(c, getDescendants))
+            d[node] <<- ndescendants
+        }
+    }
+    getValues <- function(node) {
+        c = children[[node]]
+        if(is.null(c)) {
+            return(v[node])
+        }
+        else {
+            values = sapply(c, getValues)
+            v[node] <<- sum(values * d[c]) / sum(d[c])
+        }
+    }
+    root = findRoot(tr)
+    getDescendants(root)
+    getValues(root)
+
+    nsegments = 2 * nnodes + ntips - 1
+    npoints = nnodes + ntips
+    ## step 3: tree traversed starting from the root. We find the two
+    ## children of the current node. Base case is that we're at a
+    ## leaf, in which case we just put a point at the position
+    ## given. If we're at an internal node, we need to find the
+    ## children, find the x and y positions for the children, put a
+    ## point at the node and draw three segments (one horizontal and
+    ## two vertical). 
+    plot_subtree <- function(node, position) {
+        c = children[[node]]
+        x = position[1]
+        y = position[2]
+        if(is.null(c)) {
+            pointDF = data.frame(x = position[1], y = position[2], node = node)
+            segmentDF = NULL
+            return(list(pointDF = pointDF, segmentDF = segmentDF))
+        }
+        ## put the children in order of their values
+        c = c[order(v[c])]
+        ## compute positions of child nodes
+        xc = position[1] + get_child_offsets(d[c])
+        yc = rep(position[2] - 1, length(c))
+        pointList = list()
+        segmentList = list()
+        ## subtree plotting frames for each of the child nodes
+        for(i in seq_along(c)) {
+            subtree_plot = plot_subtree(c[i], c(xc[i], yc[i]))
+            pointList[[i]] = subtree_plot$pointDF
+            segmentList[[i]] = subtree_plot$segmentDF
+        }        
+        ### start function to combine subtree data frames ###
+        subtree_frames = combine_subtree_frames(pointList, segmentList,
+            x, y, node,
+            xc, yc, c)
+        return(subtree_frames)
+    }
+    plottingDFs = plot_subtree(root, c(0,0))
+    ggplot(plottingDFs$segmentDF) +
+        geom_segment(aes(x = x, y = y, xend = xend, yend = yend))
+    return(plottingDFs)
+}
+
+#' Combines frames for subtrees and adds connecting points
+#'
+#' @param pointList A list of data frames for plotting points in each
+#' of the child subtrees.
+#' @param segmentList A list of data frames for plotting segmenst in
+#' each of the child subtrees.
+#' @param xroot The x position of the node connecting the subtrees.
+#' @param yroot The y position of the node connecting the subtrees.
+#' @param root_name
+#' @param xc The x positions of the roots of the child subtrees.
+#' @param yc The y positions of the roots of the child subtrees.
+#' @param child_names
+#'
+#' @return A list with pointDF and segmentDF, for plotting the tree.
+combine_subtree_frames <- function(pointList, segmentList,
+                                   xroot, yroot, root_name,
+                                   xc, yc, child_names) {
+    pointDF = Reduce(rbind, pointList)
+    if(all(sapply(segmentList, is.null))) {
+        segmentDF = data.frame(x = numeric(0),
+            y = numeric(0),
+            xend = numeric(0),
+            yend = numeric(0),
+            type = character(0),
+            stringsAsFactors = FALSE)
+    } else {
+        segmentDF = Reduce(rbind, segmentList)
+    }
+    npoints = nrow(pointDF)
+    nsegs = nrow(segmentDF)
+    ## add the base point for this tree
+    pointDF[npoints + 1,1:2] = c(xroot, yroot)
+    pointDF$node[npoints + 1] = root_name
+    ## horizontal segment
+    segmentDF[nsegs + 1,1:4] = c(xc[1], yroot, xc[length(xc)], yroot)
+    segmentDF$type[nsegs + 1] = "horizontal"
+    ## vertical segments
+    for(i in seq_along(child_names)) {
+        segmentDF[nsegs + 1 + i, 1:4] = c(xc[i], yc[i], xc[i], yroot)
+        segmentDF$type[nsegs + 1 + i] = "vertical"
+        segmentDF$parentNode[nsegs + 1 + i] = root_name
+        segmentDF$childNode[nsegs + 1 + i] = child_names[i]
+    }
+    return(list(pointDF = pointDF, segmentDF = segmentDF))
+}
+
+#' Compute offsets for children of a node
+#'
+#' @param descendant_vec A vector of length equal to the number of
+#' children, giving the number of descendants each of the children
+#' has.
+#'
+#' @return A vector of length equal to the number of children, giving
+#' the offset for each of the children.
+get_child_offsets <- function(descendant_vec) {
+    -sum(descendant_vec) / 2 + cumsum(descendant_vec) - descendant_vec/ 2
+}
+
+
+makeChildMapping <- function(tr) {
+    map = list()
+    for(n in unique(tr$edge[,1])) {
+        map[[n]] = tr$edge[tr$edge[,1] == n,2]
+    }
+    return(map)
+}
+
+findRoot <- function(tr) {
+    setdiff(tr$edge[,1], tr$edge[,2])
+}
+
+
+
+tree_theme = theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+    
+)
+
+
 
 
 # copied from the phyloseq function tree_layout, tree must be in postorder
@@ -199,36 +549,6 @@ get_guf_contribs <- function(tr, v1, v2, alpha, include.lengths = FALSE) {
 }
 
 
-# tree must be in postorder
-get_ndescendants <- function(tr) {
-    ndescendants = rep(1, length(tr$tip.label))[tr$edge[,2]]
-    for(i in 1:nrow(tr$edge)) {
-        if(!is.na(ndescendants[i]))
-            next
-        node = tr$edge[i,2]
-        childrenIdx = which(tr$edge[,1] == node)
-        ndescendants[i] = sum(ndescendants[childrenIdx])
-    }
-    return(ndescendants)
-}
-
-plotEdgeContribs <- function(tr, c, ...) {
-    p = plot_tree(tr)
-    pdata = as.data.frame(p$data)
-    contribDF = data.frame(tr$edge)
-    contribDF$contrib = c
-    contribDF$edgeID = apply(contribDF, 1, function(x)
-        paste(as.numeric(x[1]), as.numeric(x[2]), sep = "_"))
-    pdata$edgeID = apply(pdata, 1, function(x)
-        paste(as.numeric(x[1]), as.numeric(x[2]), sep = "_"))
-    merged = merge(pdata, contribDF, by = "edgeID")
-    plot = p + 
-        geom_segment(aes(x = xleft, y = y, xend = xright, yend = y,
-                         color = contrib), data = merged) +
-                             scale_color_viridis(...) +
-                                 coord_flip() + scale_x_reverse()
-    return(plot)
-}
 
 rv_coef <- function(X1, X2) {
     X1 = scale(X1, scale = FALSE)
@@ -300,18 +620,6 @@ makeGlommedList <- function(phy, kvec) {
     glommedList = lapply(kvec, function(k) tip_glom_k(phy, k = k))
 }
 
-makeGlommingScores <- function(glommedList, kvec, method, d) {
-    ordList = lapply(glommedList, function(p) ordinate(p, method = method, distance = d))
-    for(i in 2:length(kvec)) {
-        r = adaptiveGPCA:::findReflection(ordList[[i-1]]$vectors[,1:2], ordList[[i]]$vectors[,1:2])
-        ordList[[i]]$vectors = sweep(ordList[[i]]$vectors, 2, STATS = r, FUN = "*")
-    }
-    scoresList = lapply(ordList, function(o) data.frame(o$vectors[,1:2], sample_data(glommedList[[1]])))
-    scores = Reduce(rbind, scoresList)
-    scores$ntaxa = rep(kvec, each = nsamples(glommedList[[1]]))
-    return(scores)
-}
-
 makeGlommingDistances <- function(glommedList, kvec, d) {
     distList = lapply(glommedList, function(p) distance(p, method = d))
     n = nsamples(glommedList[[1]])
@@ -354,29 +662,6 @@ makeGlommingDistancesGUF <- function(glommedList, kvec, alpha) {
     colnames(out.distatis$res4Cmat$C) = rownames(out.distatis$res4Cmat$C) = kvec
     return(out.distatis)
    
-}
-
-makeGlommingScoresDPCoA <- function(glommedList, kvec) {
-    dpcoaList = lapply(glommedList, function(g) {
-        if(taxa_are_rows(g)) {
-            X = t(as(otu_table(g), "matrix"))
-        } else {
-            X = as(otu_table(g), "matrix")
-        }
-        dpcoaDist(X, phy_tree(g))
-    })
-    ## find the sign changes for the axes that make the points
-    ## align the best from one plot to another
-    for(i in 2:length(kvec)) {
-        r = adaptiveGPCA:::findReflection(dpcoaList[[i-1]][,1:2], dpcoaList[[i]][,1:2])
-        dpcoaList[[i]] = sweep(dpcoaList[[i]], 2, STATS = r, FUN = "*")
-    }
-    scoresList = lapply(dpcoaList, function(o)
-        data.frame(o[,1:2], sample_data(glommedList[[1]])))
-    scores = Reduce(rbind, scoresList)
-    scores$ntaxa = rep(kvec, each = nsamples(glommedList[[1]]))
-    colnames(scores)[1:2] = c("Axis.1", "Axis.2")
-    return(scores)
 }
 
 # copied from ape but with the collapse.singles line deleted
