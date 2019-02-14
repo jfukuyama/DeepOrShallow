@@ -3,7 +3,7 @@
 ```r
 library(knitr)
 opts_chunk$set(cache=TRUE, cache.path = "figures-cache/",
-    fig.path = "figures/", dev=c("pdf", "png"),
+    fig.path = "figures/", dev="png",
     fig.width = 5, fig.height = 3)
 ```
 
@@ -13,155 +13,18 @@ opts_chunk$set(cache=TRUE, cache.path = "figures-cache/",
 library(phyloseq)
 library(ape)
 library(igraph)
-```
-
-```
-## 
-## Attaching package: 'igraph'
-```
-
-```
-## The following objects are masked from 'package:ape':
-## 
-##     edges, mst, ring
-```
-
-```
-## The following objects are masked from 'package:stats':
-## 
-##     decompose, spectrum
-```
-
-```
-## The following object is masked from 'package:base':
-## 
-##     union
-```
-
-```r
 library(ggnetwork)
 library(viridis)
-```
-
-```
-## Loading required package: viridisLite
-```
-
-```r
 library(ade4)
 library(Matrix)
 library(cluster)
 library(DistatisR)
-```
-
-```
-## Loading required package: prettyGraphs
-```
-
-```
-## Loading required package: car
-```
-
-```
-## Loading required package: carData
-```
-
-```r
 library(parallel)
 library(foreach)
 library(tidyverse)
-```
-
-```
-## ── Attaching packages ────────────────────────────────── tidyverse 1.2.1 ──
-```
-
-```
-## ✔ tibble  2.0.1     ✔ purrr   0.2.5
-## ✔ tidyr   0.8.2     ✔ dplyr   0.7.8
-## ✔ readr   1.3.1     ✔ stringr 1.3.1
-## ✔ tibble  2.0.1     ✔ forcats 0.3.0
-```
-
-```
-## Warning: package 'tibble' was built under R version 3.5.2
-```
-
-```
-## ── Conflicts ───────────────────────────────────── tidyverse_conflicts() ──
-## ✖ purrr::accumulate()    masks foreach::accumulate()
-## ✖ dplyr::as_data_frame() masks tibble::as_data_frame(), igraph::as_data_frame()
-## ✖ purrr::compose()       masks igraph::compose()
-## ✖ tidyr::crossing()      masks igraph::crossing()
-## ✖ tidyr::expand()        masks Matrix::expand()
-## ✖ dplyr::filter()        masks stats::filter()
-## ✖ dplyr::groups()        masks igraph::groups()
-## ✖ dplyr::lag()           masks stats::lag()
-## ✖ dplyr::recode()        masks car::recode()
-## ✖ purrr::simplify()      masks igraph::simplify()
-## ✖ purrr::some()          masks car::some()
-## ✖ purrr::when()          masks foreach::when()
-```
-
-```r
 library(magrittr)
-```
-
-```
-## 
-## Attaching package: 'magrittr'
-```
-
-```
-## The following object is masked from 'package:purrr':
-## 
-##     set_names
-```
-
-```
-## The following object is masked from 'package:tidyr':
-## 
-##     extract
-```
-
-```r
 library(gg3D)
 library(plyr)
-```
-
-```
-## -------------------------------------------------------------------------
-```
-
-```
-## You have loaded plyr after dplyr - this is likely to cause problems.
-## If you need functions from both plyr and dplyr, please load plyr first, then dplyr:
-## library(plyr); library(dplyr)
-```
-
-```
-## -------------------------------------------------------------------------
-```
-
-```
-## 
-## Attaching package: 'plyr'
-```
-
-```
-## The following objects are masked from 'package:dplyr':
-## 
-##     arrange, count, desc, failwith, id, mutate, rename, summarise,
-##     summarize
-```
-
-```
-## The following object is masked from 'package:purrr':
-## 
-##     compact
-```
-
-```r
 source("tree_breaking_functions.R")
 load("phyloseq_objects.RData")
 ```
@@ -211,7 +74,7 @@ ggplot(leaf_sizes %>% group_by(n_leaves) %>% dplyr::summarise(n_trees = n())) +
           axis.title.y = element_text(size = 9))
 ```
 
-![plot of chunk uf-equiv-abt](figures/uf-equiv-abt-1.pdf)
+![plot of chunk uf-equiv-abt](figures/uf-equiv-abt-1.png)
 
 We might also be interested in what the relationship is between the
 relative abundances of OTUs in a subtree and the size of that
@@ -229,7 +92,7 @@ ggplot(subtree_ab) +
     ylab("Average log-transformed abundance of subtree")
 ```
 
-![plot of chunk uf-equiv-abt-sizes](figures/uf-equiv-abt-sizes-1.pdf)
+![plot of chunk uf-equiv-abt-sizes](figures/uf-equiv-abt-sizes-1.png)
 
 ## Branch Decomposition
 
@@ -252,7 +115,7 @@ contrib_accumulation_plot(contrib_matrix, phy_tree(abt_log), unlist(alpha_list))
         xlab("Number of descendants") + ylab("Proportion of distance") + labs(color = "alpha")
 ```
 
-![plot of chunk branch-decomp-accum-plot](figures/branch-decomp-accum-plot-1.pdf)
+![plot of chunk branch-decomp-accum-plot](figures/branch-decomp-accum-plot-1.png)
 
 
 Plotting contributions along the tree:
@@ -297,7 +160,7 @@ ggplot(tree_and_covariates) +
         tree_theme
 ```
 
-![plot of chunk branch-decomp-avg-pairs-plot-abt](figures/branch-decomp-avg-pairs-plot-abt-1.pdf)
+![plot of chunk branch-decomp-avg-pairs-plot-abt](figures/branch-decomp-avg-pairs-plot-abt-1.png)
 
 ```r
 ggplot(tree_and_covariates) +
@@ -310,7 +173,7 @@ ggplot(tree_and_covariates) +
     tree_theme
 ```
 
-![plot of chunk branch-decomp-avg-pairs-plot-abt](figures/branch-decomp-avg-pairs-plot-abt-2.pdf)
+![plot of chunk branch-decomp-avg-pairs-plot-abt](figures/branch-decomp-avg-pairs-plot-abt-2.png)
 
 ## Glomming
 
@@ -376,20 +239,6 @@ abt.glomming.dpcoa.plot = ggplot(glom.rv.abt.dpcoa) +
 
 ```r
 library(gridExtra)
-```
-
-```
-## 
-## Attaching package: 'gridExtra'
-```
-
-```
-## The following object is masked from 'package:dplyr':
-## 
-##     combine
-```
-
-```r
 g_legend<-function(a.gplot){
   tmp <- ggplot_gtable(ggplot_build(a.gplot))
   leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
@@ -403,7 +252,7 @@ grid.arrange(abt.glomming.dpcoa.plot + theme(legend.position = "none"),
              ncol = 2, widths = c(1, .3))
 ```
 
-![plot of chunk combined-glomming-abt](figures/combined-glomming-abt-1.pdf)
+![plot of chunk combined-glomming-abt](figures/combined-glomming-abt-1.png)
 
 
 ## MDS plot describing relationships between all the distances
@@ -471,4 +320,4 @@ grid.arrange(p2d + theme(legend.position = "none"),
              ncol = 2, widths = c(1, .3), layout_matrix = matrix(c(1,3,2,2), nrow = 2))
 ```
 
-![plot of chunk distatis-abt-plots](figures/distatis-abt-plots-1.pdf)
+![plot of chunk distatis-abt-plots](figures/distatis-abt-plots-1.png)
