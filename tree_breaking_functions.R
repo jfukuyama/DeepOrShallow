@@ -426,31 +426,6 @@ tree_theme = theme(
     
 )
 
-
-
-
-# copied from the phyloseq function tree_layout, tree must be in postorder
-get_node_positions <- function(tr) {
-    Nedge = nrow(tr$edge)[1]
-    Nnode = tr$Nnode
-    Ntip = length(tr$tip.label)
-    ROOT = Ntip + 1
-    TIPS = tr$edge[(tr$edge[,2] <= Ntip), 2]
-    NODES = (ROOT):(Ntip + Nnode)
-    nodelabels = tr$node.label
-    xx = phyloseq:::ape_node_depth_edge_length(Ntip, Nnode, tr$edge, Nedge, tr$edge.length)
-    yy = numeric(Ntip + Nnode)
-    yy[TIPS] = 1:Ntip
-    ape_node_height <- function(Ntip, Nnode, edge, Nedge, yy) {
-        .C(ape:::node_height, PACKAGE = "ape", as.integer(Ntip), 
-           as.integer(Nnode), as.integer(edge[, 1]),
-           as.integer(edge[, 2]), as.integer(Nedge), as.double(yy))[[6]]
-    }
-    yy = ape_node_height(Ntip, Nnode, tr$edge, Nedge, yy)
-    return(cbind(x = yy, y = -xx))
-}
-
-
 dpcoaDist <- function(otutab, tree, r = 1) {
     Q = ape::vcv(tree)
     Qeig = eigen(Q)
