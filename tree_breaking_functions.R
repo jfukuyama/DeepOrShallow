@@ -240,7 +240,7 @@ get_ndescendants <-  function(tr) {
 #' @param tr A phylogenetic tree, from ape
 #' @param contrib_names A character vector, giving the names for the
 #' types corresponding to the rows of contribs.
-contrib_accumulation_plot <- function(contribs, tr, contrib_names) {
+contrib_accumulation_plot_old <- function(contribs, tr, contrib_names) {
     desc = get_ndescendants(tr)
     breaks = unique(desc)
     out = sapply(breaks, function(b) rowSums(contribs[,desc <= b]) / rowSums(contribs))
@@ -249,6 +249,24 @@ contrib_accumulation_plot <- function(contribs, tr, contrib_names) {
     levels(plotting_df$variable) = contrib_names
     attributes(plotting_df$variable)$class = c("ordered", "factor")
     return(ggplot(plotting_df, aes(x = breaks, y = value, color = variable)))
+}
+
+#' Makes accumulation plot for branch contributions.
+#'
+#' @param contribs A matrix with columns corresponding to branches.
+#' @param tr A phylogenetic tree, from ape
+#' @param contrib_names A character vector, giving the names for the
+#' types corresponding to the rows of contribs.
+contrib_accumulation_plot = function(contribs, tr, contrib_names) {
+    desc = get_ndescendants(tr)
+    breaks = unique(desc)
+    out = sapply(breaks, function(b) rowSums(contribs[,desc <= b]) / rowSums(contribs))
+    contribs_and_breaks = data.frame(t(out),
+        proportion_of_branches = sapply(breaks, function(b) mean(desc <= b)))
+    plotting_df = melt(contribs_and_breaks, id.vars = "proportion_of_branches")
+    levels(plotting_df$variable) = contrib_names
+    attributes(plotting_df$variable)$class = c("ordered", "factor")
+    return(ggplot(plotting_df, aes(x = proportion_of_branches, y = value, color = variable)))
 }
 
 #' Tree plotting
