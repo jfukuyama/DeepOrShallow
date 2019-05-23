@@ -142,6 +142,21 @@ ggplot(tree_and_covariates) +
     tree_theme
 ```
 
+Compute unnormalized branch contributions (for a full branches, not per unit branch).
+
+```{r unnormalized-branch-decomp-calcs}
+contrib_matrix_unnormalized = get_all_branch_contribs(
+    X = t(as(otu_table(abt_log), "matrix")),
+    tr = phy_tree(abt_log),
+    alpha_list = alpha_list, per_unit_branch = FALSE)
+```
+
+```{r unnormalized-branch-decomp-accum-plot, fig.width = 5.5, fig.height = 2.5}
+contrib_accumulation_plot(contrib_matrix_unnormalized, phy_tree(abt_log), unlist(alpha_list))  +
+        geom_point(size=.5) + geom_line() +
+        xlab("Proportion of branches") + ylab("Proportion of distance") + labs(color = "alpha")
+```
+
 ## Glomming
 
 First glom the tips together.

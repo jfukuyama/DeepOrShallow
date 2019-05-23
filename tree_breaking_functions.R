@@ -149,14 +149,14 @@ get_branch_probs <- function(X, tr) {
 #' character element "unweighted" corresponds to unweighted Unifrac.
 #'
 #' @return 
-get_all_branch_contribs <- function(X, tr, alpha_list) {
+get_all_branch_contribs <- function(X, tr, alpha_list, per_unit_branch = TRUE) {
     P = get_branch_probs(X, tr)
     branch_lengths = tr$edge.length
     all_contribs = plyr::laply(alpha_list, function(a) {
         if(a == "unweighted") {
-            return(uf_contribs_from_branch_probs(P, branch_lengths))
+            return(uf_contribs_from_branch_probs(P, branch_lengths, per_unit_branch))
         } else if(is.numeric(a) && a >= 0 && a <= 1) {
-            return(guf_contribs_from_branch_probs(P, branch_lengths, a))
+            return(guf_contribs_from_branch_probs(P, branch_lengths, a, per_unit_branch))
         } else {
             warning("alpha not in [0,1] or equal to 'unweighted'")
             return(NULL)
@@ -177,7 +177,7 @@ get_all_branch_contribs <- function(X, tr, alpha_list) {
 #' @param alpha Alpha parameter for generalized Unifrac.
 #'
 #' @return A vector of length nbranches giving branch contributions.
-guf_contribs_from_branch_probs <- function(P, branch_lengths, alpha) {
+guf_contribs_from_branch_probs <- function(P, branch_lengths, alpha, per_unit_branch = TRUE) {
     n = nrow(P)
     pairs = combn(n,2)
     branch_contrib =
@@ -187,7 +187,11 @@ guf_contribs_from_branch_probs <- function(P, branch_lengths, alpha) {
             guf_dist = sum(branch_lengths * (p1 + p2)^alpha *
                                abs((p1 - p2) / (p1 + p2)), na.rm = TRUE)
             contrib = (p1 + p2)^alpha * abs((p1 - p2) / (p1 + p2)) / guf_dist
+            if(!per_unit_branch) {
+                contrib = contrib * branch_lengths
+            }
             contrib[(p1 + p2 == 0)] = 0
+            if(guf_dist == 0) contrib = rep(0, length(contrib))
             return(contrib)
         })
     return(rowMeans(branch_contrib))
@@ -204,7 +208,7 @@ guf_contribs_from_branch_probs <- function(P, branch_lengths, alpha) {
 #' lengths.
 #'
 #' @return A vector of length nbranches giving branch contributions.
-uf_contribs_from_branch_probs <- function(P, branch_lengths) {
+uf_contribs_from_branch_probs <- function(P, branch_lengths, per_unit_branch = TRUE) {
     P_ind = P > 0
     ## for all pairs of indices
     n = nrow(P)
@@ -214,7 +218,13 @@ uf_contribs_from_branch_probs <- function(P, branch_lengths) {
             p1 = P_ind[idx[1],]
             p2 = P_ind[idx[2],]
             uf_dist = sum(branch_lengths * abs(p1 - p2)) / sum(branch_lengths)
-            return(abs(p1 - p2) / uf_dist)
+            if(is.na(uf_dist)) browser()
+            if(uf_dist == 0) return(rep(0, length(p1)))
+            if(per_unit_branch) {
+                return(abs(p1 - p2) / uf_dist)
+            } else {
+                return(branch_lengths * abs(p1 - p2) / uf_dist)
+            }
         })
     return(rowMeans(branch_contrib))
 }
