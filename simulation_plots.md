@@ -4,20 +4,7 @@
 
 In this file, we give the code used for the simulated data.
 We start off with some functions we need for the simulations and plotting.
-The `getDescendants` function below is due to , and the `g_legend` function is from 
-
-
-```r
-getDescendants<-function(tree,node,curr=NULL){
-  if(is.null(curr)) curr<-vector()
-  daughters<-tree$edge[which(tree$edge[,1]==node),2]
-  curr<-c(curr,daughters)
-  w<-which(daughters>=length(tree$tip))
-  if(length(w)>0) for(i in 1:length(w)) 
-    curr<-getDescendants(tree,daughters[w[i]],curr)
-  return(curr)
-}
-```
+The `g_legend` function is from [stackoverflow](https://stackoverflow.com/questions/13649473/add-a-common-legend-for-combined-ggplots).
 
 
 ```r
