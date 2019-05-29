@@ -3,7 +3,7 @@
 ```r
 library(knitr)
 opts_chunk$set(cache=TRUE, cache.path = "figures-cache/",
-    fig.path = "figures/", dev="png",
+    fig.path = "figures/", dev=c("png"),
     fig.width = 5, fig.height = 3)
 ```
 
@@ -109,10 +109,19 @@ Accumulation plot:
 
 
 ```r
-contrib_accumulation_plot(contrib_matrix, phy_tree(abt_log), unlist(alpha_list))  +
+contrib_accumulation_plot_old(contrib_matrix, phy_tree(abt_log), unlist(alpha_list))  +
         geom_point(size=.5) + geom_line() +
         scale_x_log10(breaks = c(2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500)) +
         xlab("Number of descendants") + ylab("Proportion of distance") + labs(color = "alpha")
+```
+
+![plot of chunk branch-decomp-accum-plot-old](figures/branch-decomp-accum-plot-old-1.png)
+
+
+```r
+contrib_accumulation_plot(contrib_matrix, phy_tree(abt_log), unlist(alpha_list))  +
+        geom_point(size=.5) + geom_line() +
+        xlab("Proportion of branches") + ylab("Proportion of distance") + labs(color = "alpha")
 ```
 
 ![plot of chunk branch-decomp-accum-plot](figures/branch-decomp-accum-plot-1.png)
@@ -174,6 +183,25 @@ ggplot(tree_and_covariates) +
 ```
 
 ![plot of chunk branch-decomp-avg-pairs-plot-abt](figures/branch-decomp-avg-pairs-plot-abt-2.png)
+
+Compute unnormalized branch contributions (for a full branches, not per unit branch).
+
+
+```r
+contrib_matrix_unnormalized = get_all_branch_contribs(
+    X = t(as(otu_table(abt_log), "matrix")),
+    tr = phy_tree(abt_log),
+    alpha_list = alpha_list, per_unit_branch = FALSE)
+```
+
+
+```r
+contrib_accumulation_plot(contrib_matrix_unnormalized, phy_tree(abt_log), unlist(alpha_list))  +
+        geom_point(size=.5) + geom_line() +
+        xlab("Proportion of branches") + ylab("Proportion of distance") + labs(color = "alpha")
+```
+
+![plot of chunk unnormalized-branch-decomp-accum-plot](figures/unnormalized-branch-decomp-accum-plot-1.png)
 
 ## Glomming
 
@@ -298,22 +326,28 @@ out_distatis = distatis(distance_array)
 ```r
 labs = sprintf("Axis %i: %4.2f%%", 1:length(distance_list),
     out_distatis$res4Cmat$eigValues / sum(out_distatis$res4Cmat$eigValues) * 100)
-plotting = data.frame(distance_types, out_distatis$res4Cmat$eigVector)
+plotting = data.frame(distance_types, sweep(scale(out_distatis$res4Cmat$eigVector, center = TRUE), MARGIN = 2, STAT = sqrt(out_distatis$res4Cmat$eigValues), FUN = "*"))
 plotting$dim.1 = -plotting$dim.1
 p2d = ggplot(plotting) +
     geom_point(aes(x = dim.1, y = dim.2, shape = family, color = param)) +
     xlab(labs[1]) +  ylab(labs[2]) + labs(color = "Parameter:\nalpha or r", shape = "Distance\ntype") +
-        scale_color_viridis() + guides(color = guide_legend(barwidth = 3)) + 
-            theme(axis.ticks = element_blank(), axis.text = element_blank())
+        scale_color_viridis() + guides(color = guide_legend(barwidth = 3))
 theta = 35
 phi = 0
-p3d = ggplot(plotting, aes(x = dim.1, y = dim.2, z = dim.3, color = param, shape = family)) + 
+p3d =
+    ggplot(plotting, aes(x = dim.1, y = dim.2, z = dim.3, color = param, shape = family)) +
     labs_3D(labs=labs[1:3],theta = theta, phi = phi,
             hjust=c(-.1,.25,-.1), vjust=c(0, -1, 0), angle=c(0, 0, 0)) +
     labs(color = "Parameter:\nalpha or r", shape = "Distance\ntype") +
+        axis_labs_3D(data = function(x) {
+            ## this is to make the scales for the axes display correctly
+            x$dim.1 = round(as.numeric(x$dim.1), digits = 2)
+            x$dim.2 = round(as.numeric(x$dim.2), digits = 2)
+            x$dim.3 = round(as.numeric(x$dim.3), digits = 2)
+            return(x)
+        }, size=2.3,theta = theta, phi = phi,hjust=c(0,1.2,0,2.1,1.27,1),vjust=c(1.5,1.8,1.5,1.5,1.5,2)) +
     axes_3D(theta = theta, phi = phi) + stat_3D(theta=theta, phi = phi) +
-        scale_color_viridis() + theme_void()
-
+    scale_color_viridis() + theme_blank()
 grid.arrange(p2d + theme(legend.position = "none"),
              g_legend(p2d),
              p3d + theme(legend.position = "none"),

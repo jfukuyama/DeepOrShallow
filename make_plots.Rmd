@@ -2,7 +2,7 @@
 ```{r}
 library(knitr)
 opts_chunk$set(cache=TRUE, cache.path = "figures-cache/",
-    fig.path = "figures/", dev=c("pdf", "png"),
+    fig.path = "figures/", dev=c("png"),
     fig.width = 5, fig.height = 3)
 ```
 
