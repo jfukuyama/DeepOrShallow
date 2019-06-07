@@ -12,7 +12,7 @@ library(rmutil)
 library(ape)
 library(gridExtra)
 library(phytools)
-source("tree_breaking_functions.R")
+source("tree_decomp_functions.R")
 alpha_list = list("unweighted", 0, .25, .5, .75, 1)
 g_legend <- function(a.gplot){
   tmp <- ggplot_gtable(ggplot_build(a.gplot))

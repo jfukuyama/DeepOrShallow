@@ -23,7 +23,7 @@ library(tidyverse)
 library(magrittr)
 library(gg3D)
 library(plyr)
-source("tree_breaking_functions.R")
+source("tree_decomp_functions.R")
 load("phyloseq_objects.RData")
 ```
 
