@@ -545,7 +545,8 @@ makeGlommingDistancesGUF <- function(glommedList, kvec, alpha) {
    
 }
 
-# copied from ape but with the collapse.singles line deleted
+## This function is a modified version of the drop.tip function in ape (https://CRAN.R-project.org/package=ape)
+## A line containing drop.singles was deleted to allow for nodes with only one descendant.
 my.drop.tip <- 
 function (phy, tip, trim.internal = TRUE, subtree = FALSE, root.edge = 0, 
     rooted = is.rooted(phy), interactive = FALSE) 
